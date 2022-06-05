@@ -1,0 +1,405 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
+#include <time.h>
+
+#define _CRT_SECURE_NO_WARNINGS
+
+struct Keywords {
+    char** member;
+    int length;
+};
+
+typedef struct {
+    char name[100];
+    char oTitle[100];
+    char releaseDate[20];
+    int runtime;
+    char genre[200];
+    char oLang[25];
+    char status[25];
+    float budget;
+    struct Keywords keywords;
+} Movie;
+
+float moneyToFloat(char* str) {
+    float result = 0.00f;
+    if (strcmp("-", str) != 0) {
+        char* aux = malloc(strlen(str) + 1);
+        int count = 0;
+        for (int i = 0; i < strlen(str); i++)
+            if (str[i] != '$' && str[i] != ',')
+                aux[count++] = str[i];
+        aux[count] = 0;
+        result = atof(aux);
+        free(aux);
+    }
+    return result;
+}
+
+char* removeDataName(char* str, char* dataName) {
+    int count = 0;
+    char* newStr = malloc(strlen(str) + 1);
+    for (int i = strlen(dataName); i < strlen(str); i++)
+        newStr[count++] = str[i];
+    newStr[count] = 0;
+    return newStr;
+}
+
+int stringToMin(char* str) {
+    int result = 0, n = strlen(str);
+    if (n < 4) {
+        if (str[1] == 'h') result += 60 * (str[0] - '0');
+        else {
+            char* aux = malloc(sizeof(str));
+            strcpy(aux, str);
+            strncat(str, aux, n - 2);
+            result += atoi(str);
+        }
+    }
+    else {
+        result += 60 * (str[0] - '0');
+        char* aux = malloc(n - 4);
+        for (int i = 3, j = 0; i < n - 1; i++)
+            aux[j++] = str[i];
+        result += atoi(aux);
+    }
+    return result;
+}
+
+char* removeHtmlEntities(char* str) {
+    char* newStr = malloc(strlen(str) + 1);
+    bool isHtmlEntities = false;
+    int count = 0;
+    for (int i = 0; i < strlen(str); i++) {
+        if (str[i] == '&') isHtmlEntities = true;
+        else if (str[i] == ';') isHtmlEntities = false;
+        if (!isHtmlEntities && str[i] != '&' && str[i] != ';')
+            newStr[count++] = str[i];
+    }
+    newStr[count] = 0;
+    return newStr;
+}
+
+char* trimSpace(char* str) {
+    char* aux;
+    while (isspace((unsigned char)*str)) str++;
+    if (*str == 0) return str;
+    aux = str + strlen(str) - 1;
+    while (aux > str && isspace((unsigned char)*aux)) aux--;
+    aux[1] = '\0';
+    return str;
+}
+
+char* removeTags(char* str) {
+    char* newStr = malloc(strlen(str) + 1);
+    bool isTag = false;
+    int count = 0;
+    for (int i = 0; i < strlen(str); i++) {
+        if (str[i] == '<') isTag = true;
+        else if (str[i] == '>') isTag = false;
+        if (!isTag && str[i] != '<' && str[i] != '>' && str[i] != '\n')
+            newStr[count++] = str[i];
+    }
+    newStr[count] = 0;
+    return newStr;
+}
+
+struct Keywords emptyKeywords() {
+    struct Keywords keywords;
+    keywords.member = malloc(sizeof(char*));
+    keywords.member[0] = malloc(2);
+    strcpy(keywords.member[0], "");
+    keywords.length = 0;
+    return keywords;
+}
+
+Movie emptyMovie() {
+    Movie m;
+    strcpy(m.name, "");
+    strcpy(m.oTitle, "");
+    strcpy(m.releaseDate, "");
+    m.runtime = 0;
+    strcpy(m.genre, "");
+    strcpy(m.oLang, "");
+    strcpy(m.status, "");
+    m.budget = 0.00f;
+    return m;
+}
+
+struct Keywords parseKeywords(FILE* f, char* line) {
+    for (int i = 0; i < 2; i++) fgets(line, 1000, f);
+    struct Keywords keywords = emptyKeywords();
+    if (strcmp(trimSpace(removeTags(line)), "Nenhuma palavra-chave foi adicionada.") != 0) {
+        char** aux = malloc(sizeof(char*) * 30);
+        for (int i = 0; i < 30; i++) aux[i] = malloc(100);
+        while (strstr(line, "</ul>") == 0) {
+            if (strstr(line, "<li>")) {
+                strcpy(aux[keywords.length], removeTags(trimSpace(line)));
+                if (strcmp(aux[keywords.length], "") != 0) keywords.length++;
+            }
+            fgets(line, 1000, f);
+        }
+        keywords.member = malloc(sizeof(char*) * keywords.length);
+        for (int i = 0; i < keywords.length; i++) {
+            keywords.member[i] = malloc(strlen(aux[i]) + 1);
+            strcpy(keywords.member[i], aux[i]);
+        }
+        free(aux);
+    }
+    return keywords;
+}
+
+Movie readMovie(char fileName[100]) {
+    Movie m = emptyMovie();
+    char* filePath;
+    filePath = malloc(sizeof(char) * 1000);
+    strcpy(filePath, "tmp/filmes/");
+    strcat(filePath, fileName);
+    if (strchr(filePath, 13)) {
+        filePath[strlen(filePath) - 1] = 0;
+    }
+    FILE* f = fopen(filePath, "r");
+    if (f == NULL) {
+        char* aux = malloc(1000);
+        strcpy(aux, "/");
+        strcat(aux, filePath);
+        f = fopen(aux, "r");
+    }
+    char* line = malloc(sizeof(char) * 1000);
+    while (fgets(line, 1000, f) != NULL) {
+        if (strstr(line, "h2 class")) {
+            fgets(line, 1000, f);
+            strcpy(m.name, trimSpace(removeTags(line)));
+            strcpy(m.oTitle, m.name);
+        }
+        else if (strstr(line, "\"release\"")) {
+            fgets(line, 1000, f);
+            strncpy(m.releaseDate, trimSpace(line), 10);
+            m.releaseDate[10] = 0;
+        }
+        else if (strstr(line, "\"genres\"")) {
+            for (int i = 0; i < 2; i++) fgets(line, 1000, f);
+            strcpy(m.genre, trimSpace(removeHtmlEntities(removeTags(line))));
+        }
+        else if (strstr(line, "\"runtime\"")) {
+            for (int i = 0; i < 2; i++) fgets(line, 1000, f);
+            m.runtime = stringToMin(trimSpace(line));
+        }
+        else if (strstr(line, "Título original")) {
+            strcpy(m.oTitle, trimSpace(removeDataName(trimSpace(removeTags(line)), "Título original")));
+        }
+        else if (strstr(line, "Situação")) {
+            strcpy(m.status, trimSpace(removeDataName(trimSpace(removeTags(line)), "Situação")));
+        }
+        else if (strstr(line, "Idioma original")) {
+            strcpy(m.oLang, trimSpace(removeDataName(trimSpace(removeTags(line)), "Idioma original")));
+        }
+        else if (strstr(line, "Orçamento")) {
+            m.budget = moneyToFloat(trimSpace(removeDataName(trimSpace(removeTags(line)), "Orçamento")));
+        }
+        else if (strstr(line, "Palavras-chave")) {
+            m.keywords = parseKeywords(f, line);
+        }
+    }
+    fclose(f);
+    free(filePath);
+    free(line);
+    return m;
+}
+
+void printMovie(Movie* m) {
+    printf("%s %s %s %d %s %s %s %g [", m->name, m->oTitle, m->releaseDate, m->runtime, m->genre, m->oLang, m->status, m->budget);
+    for (int i = 0; i < m->keywords.length - 1; i++) {
+        printf("%s, ", m->keywords.member[i]);
+    }
+    if (m->keywords.length > 0) printf("%s]\n", m->keywords.member[m->keywords.length - 1]);
+    else printf("]\n");
+}
+
+int isFIM(char s[1000]) {
+    return (strlen(s) <= 4 && s[0] == 'F' && s[1] == 'I' && s[2] == 'M');
+}
+
+// Author: Pedro Henrique Lopes Costa
+char* substring(char* string, int position, int length) {
+    char* p;
+    int c;
+    p = malloc(length + 1);
+    if (p == NULL) {
+        printf("Unable to allocate memory.\n");
+        exit(1);
+    }
+    for (c = 0; c < length; c++) {
+        *(p + c) = *(string + position - 1);
+        string++;
+    }
+    *(p + c) = '\0';
+    return p;
+}
+
+typedef struct Cell {
+    void* item;
+    struct Cell* next;
+    struct Cell* prev;
+} Cell;
+
+Cell* newCell(size_t itemSize) {
+    Cell* temp = malloc(sizeof(Cell));
+    temp->item = malloc(itemSize);
+    temp->next = NULL;
+    temp->prev = NULL;
+    return temp;
+}
+
+/*===============================================================================================================================*/
+//Generic Linked List Implementation
+
+typedef struct LinkedList {
+    struct Cell* first;
+    struct Cell* last;
+    int size;
+    long numComp, numMov;
+} LinkedList;
+
+LinkedList* newLinkedList(size_t srcSize) {
+    LinkedList* tmp = malloc(sizeof(LinkedList));
+    tmp->first = newCell(srcSize);
+    tmp->last = newCell(srcSize);
+    tmp->size = tmp->numComp = tmp->numMov = 0;
+    return tmp;
+}
+
+Cell* cellAt(LinkedList* ll, int pos) {
+    Cell* c;
+    if (pos < ll->size / 2) {
+        c = ll->first;
+        for (int i = 0; i < pos; c = c->next, i++);
+    }
+    else {
+        c = ll->last;
+        for (int i = pos; i > 0; c = c->prev, i--);
+    }
+    return c;
+}
+
+void llist_insert(LinkedList* ll, void* src, size_t srcSize, int pos) {
+    Cell* tmp;
+    if (pos == 0) { // Insert at start
+        memcpy(ll->first->item, src, srcSize);
+        ll->last = ll->first;
+    }
+    else if (pos == ll->size) { // Insert at end
+        tmp = newCell(srcSize);
+        memcpy(tmp->item, src, srcSize);
+        tmp->prev = ll->last;
+        ll->last->next = tmp;
+        ll->last = tmp;
+    }
+    else { // Insert in between
+        tmp = newCell(srcSize);
+        memcpy(tmp->item, src, srcSize);
+        Cell* c = cellAt(ll, pos - 1);
+        tmp->next = c->next;
+        tmp->next->prev = tmp;
+        c->next = tmp;
+        tmp->prev = c;
+    }
+    ll->size++;
+}
+
+void* llist_remove(LinkedList* ll, int pos) {
+    void* item;
+    if (pos == 0) { // Remove from start
+        Cell* tmp = ll->first;
+        ll->first = ll->first->next;
+        item = tmp->item;
+        free(tmp);
+    }
+    else if (pos == ll->size) { // Remove from end
+        Cell* tmp = ll->last;
+        ll->last = ll->last->prev;
+        item = tmp->item;
+        free(tmp);
+    }
+    else { // Remove in between
+        Cell* tmp = cellAt(ll, pos - 1);
+        tmp->next->prev = tmp->prev;
+        tmp->prev->next = tmp->next;
+        item = tmp->item;
+        free(tmp);
+    }
+    ll->size--;
+    return item;
+}
+
+/*===============================================================================================================================*/
+/* Quicksort string-based algorithm of a general doubly linked list
+that casts its data into a Movie type and uses the attribute "status"
+as the primary comparison data and "name" as a tiebreaker */
+
+void llist_quicksortByStatus(LinkedList* ll, int left, int right) {
+    void* temp;
+    int i = left, j = right;
+    char* pivot = ((Movie*)cellAt(ll, (left + right) / 2)->item)->name;
+    while (i <= j) {
+        while (i < right && (strcmp(((Movie*)cellAt(ll, i)->item)->name, pivot) < 0)) { i++; ll->numComp += 2; }
+        while (j > left && (strcmp(cellAt(ll, j)->item, pivot) > 0)) { j--; ll->numComp += 2; }
+        if (i <= j) {
+            //if the movies status are equals it'll only swap if the movie's name at position j is lexicography smaller than the movie's name at position i;
+            if ((strcmp(((Movie*)cellAt(ll, i)->item)->status, ((Movie*)cellAt(ll, j)->item)->status) > 0) ||
+                (strcmp(((Movie*)cellAt(ll, i)->item)->status, ((Movie*)cellAt(ll, j)->item)->status) == 0) &&
+                (strcmp(((Movie*)cellAt(ll, i)->item)->name, ((Movie*)cellAt(ll, j)->item)->name) > 0)) {
+                temp = cellAt(ll, j)->item;
+                cellAt(ll, j)->item = cellAt(ll, i)->item;
+                cellAt(ll, i)->item = temp;
+                ll->numMov += 3;
+            }
+            i++;
+            j--;
+        }
+        ll->numComp += 2;
+    }
+    if (left < j) { ll->numComp++; llist_quicksortByStatus(ll, left, j); }
+    if (i < right) { ll->numComp++; llist_quicksortByStatus(ll, i, right); }
+}
+
+/*===============================================================================================================================*/
+// Driver Code
+
+int main() {
+    //Read first movies input
+    char** s = malloc(sizeof(char*) * 100);
+    int count = 0;
+    for (int i = 0; i < 200; i++) {
+        s[i] = malloc(sizeof(char) * 1000);
+        fgets(s[i], 1000, stdin);
+        s[i][strlen(s[i]) - 1] = 0;
+        if (isFIM(s[i])) break;
+        count++;
+    }
+    LinkedList* ll = newLinkedList(sizeof(Movie));
+    Movie* m = malloc(sizeof(Movie));
+    for (int i = 0; i < count; i++) {
+        *m = readMovie(s[i]);
+        llist_insert(ll, m, sizeof(Movie), ll->size);
+    }
+    free(s);
+    free(m);
+    struct timespec start, end;
+    clock_gettime(CLOCK_REALTIME, &start);
+    llist_quicksortByStatus(ll, 0, ll->size > 1 ? ll->size - 1 : 0);
+    clock_gettime(CLOCK_REALTIME, &end);
+
+    double duration = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec);
+    FILE* f = fopen("751441_quicksort_c.txt", "w");
+    fprintf(f, "751441\t%lu\t%lu\t%gns\t", ll->numComp, ll->numMov, duration);
+    int i = 0;
+    for (Cell* c = ll->first; i < ll->size; c = c->next, i++) {
+        printMovie(c->item);
+    }
+    return 0;
+}
+

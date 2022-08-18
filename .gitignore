@@ -1,4 +1,5 @@
 .vscode
 a.out
 cpp.out
-/tmp
+tmp
+tp01
